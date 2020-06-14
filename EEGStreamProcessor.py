@@ -20,7 +20,7 @@ __VERSION__ = 'v1.0.0'
 
 
 #TODO: Make sure the preprocess is the same function used in model training.
-from preprocess import bin_power, bin_power_avg
+from preprocess import bin_power_avg
 
 
 class EEGStreamProcessor:
@@ -30,34 +30,28 @@ class EEGStreamProcessor:
         args = self.parse_args()
         self.__verbose = args.verbose
         self.__model = args.model
+
         # parse config
         config = configparser.ConfigParser()
         config.read(args.config)
 
-        self.INBOUND_TOPIC      = config['DEFAULT']['STREAMER_TOPIC']
-        self.OUTBOUND_TOPIC      = config['DEFAULT']['CONSUMER_TOPIC']
-
-        self.consumer = Consumer({
-                'bootstrap.servers': config['DEFAULT']['KALFK_BROKER_ADDRESS'],
-                'auto.offset.reset': 'earliest',
-                'group.id': 'group',
-                'client.id': 'client-local',
-                'enable.auto.commit': True,
-                'session.timeout.ms': 6000
-        })
-        """consumer that reads stream of EEG signal"""
-
-        self.producer = Producer({'bootstrap.servers': config['DEFAULT']['KALFK_BROKER_ADDRESS']})
-        """producer that produces predition results"""
+        # Kafka related configs
+        self.consumer, self.producer, self.model = None, None, None
+        self.__topic_in  = config['DEFAULT']['INBOUND_TOPIC']
+        self.__topic_out = config['DEFAULT']['OUTBOUND_TOPIC']
+        self.__broker_address = config['DEFAULT']['KALFK_BROKER_ADDRESS']
+        self.__consumer_group_id = config['DEFAULT']['GROUP_ID']
+        self.__consumer_client_id = config['DEFAULT']['CLIENT_ID']
 
         # Data related configs
         self.data_height = int(config['DATA']['num_channel'])
         self.data_width  = int(config['DATA']['sampling_rate'])
 
         # Processor related configs
-        self.process_rate         = int(config['PROCESSOR']['streaming_rate'])
+        self.process_rate = int(config['PROCESSOR']['streaming_rate'])
         """The number of data to process second."""
-        self.max_process_duration    = int(config['PROCESSOR']['max_stream_duration'])
+        self.max_process_duration = int(config['PROCESSOR']['max_stream_duration'])
+        """Maximum duration to run the processor"""
         self.n_msg_per_consume = int(self.data_width * 1)
         """The number of message to consume in batch"""
 
@@ -75,8 +69,23 @@ class EEGStreamProcessor:
         self.__res   = deque()
         self.__res_t = deque()
 
+    def setup(self):
+
+        self.consumer = Consumer({
+                'bootstrap.servers': self.__broker_address,
+                'auto.offset.reset': 'earliest',
+                'group.id': self.__consumer_group_id,
+                'client.id': self.__consumer_client_id,
+                'enable.auto.commit': True,
+                'session.timeout.ms': 6000
+        })
+        """consumer that reads stream of EEG signal"""
+
+        self.producer = Producer({'bootstrap.servers': self.__broker_address})
+        """producer that produces predition results"""
+
         # Setup
-        self.consumer.subscribe([self.INBOUND_TOPIC])
+        self.consumer.subscribe([self.__topic_in])
         with open(self.__model, 'rb') as fp:
             self.model = pickle.load(fp)
 
@@ -188,7 +197,7 @@ class EEGStreamProcessor:
                 joint_str = 'pres'
             key = 'key'
             value = "{'t':%.6f,'v':["%float(tim)+"'"+joint_str+"'"+"]}"
-            self.producer.produce(self.OUTBOUND_TOPIC, key=key, value=value)
+            self.producer.produce(self.__topic_out, key=key, value=value)
             print(f'Published: {tim}, {res}') if self.__verbose else None
 
     def stop(self):
@@ -264,5 +273,6 @@ class EEGStreamProcessor:
 
 if __name__ == '__main__':
     esp = EEGStreamProcessor()
+    esp.setup()
     esp.start()
     esp.stop()

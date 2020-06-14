@@ -147,8 +147,7 @@ class EEGStreamProcessor:
             data.append(values) if time is not None else None
         #TODO:// assert there is not big time gap in the data
 
-        if len(data) < self.data_width\
-                :
+        if len(data) < self.data_width:
             return None
 
         print(timestamps[0], data[0]) if self.__verbose else None

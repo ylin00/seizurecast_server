@@ -1,7 +1,6 @@
-EEG Stream Processor
+SeizureCast Server
 ====================
-
-Consuming EEG stream from Kafka and producing predicted results from given model.
+EEG Stream Processor, consuming EEG stream from Kafka and producing predicted results from given model.
 
 Deployment: Running Kafka on EC2
 --------------------------------

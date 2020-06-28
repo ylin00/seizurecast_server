@@ -14,6 +14,7 @@ import pickle
 from confluent_kafka import Producer, Consumer
 from collections import deque
 from time import time, sleep
+from MagicBuffer import MagicBuffer
 
 
 __VERSION__ = 'v1.0.0'
@@ -58,7 +59,12 @@ class EEGStreamProcessor:
         self.delay_refresh_intv = 1 / self.process_rate
         """refresh interval in seconds."""
 
-        self.__streamqueue = deque()
+        self.__key = deque()
+        """current key for producer"""
+
+        self.__msg_buffer = MagicBuffer(
+            buffer_size=self.data_width, max_count=int(4 * self.data_width)
+        )
         # queue for raw data
         self.__data   = deque()
         self.__data_t = deque()
@@ -73,7 +79,7 @@ class EEGStreamProcessor:
 
         self.consumer = Consumer({
                 'bootstrap.servers': self.__broker_address,
-                'auto.offset.reset': 'earliest',
+                'auto.offset.reset': 'latest',
                 'group.id': self.__consumer_group_id,
                 'client.id': self.__consumer_client_id,
                 'enable.auto.commit': True,
@@ -132,31 +138,39 @@ class EEGStreamProcessor:
         if msgs is None or len(msgs) <= 0:
             return None
 
-        self.__streamqueue.extendleft(msgs)  # Enqueue
+        for msg in msgs:
 
-        if len(self.__streamqueue) < self.data_width:
-            return None
+            # MagicBuffer will keep the key-value pair and returns values of the
+            # same key as a tuple of size data_width
+            key, values = self.__msg_buffer.append(
+                key=msg.key().decode('utf-8'), value=msg.value()
+            )
 
-        # Dequeue
-        msgs__ = [self.__streamqueue.pop() for i in range(0, self.data_width)]
+            # Sanity check
+            if values is None:
+                continue
 
-        timestamps, data = [], []
-        for msg in msgs__:
-            time, values = self.decode(msg.key(), msg.value())
-            timestamps.append(time) if time is not None else None
-            data.append(values) if time is not None else None
-        #TODO:// assert there is not big time gap in the data
+            print(f"Received msg key = {key}") if self.__verbose else None
 
-        if len(data) < self.data_width:
-            return None
+            # Decode the msg values.
+            timestamps, data = [], []
+            for value in values:
+                time, values = self.decode(key, value)
+                timestamps.append(time) if time is not None else None
+                data.append(values) if time is not None else None
 
-        print(timestamps[0], data[0]) if self.__verbose else None
+            # Sanity check
+            if len(data) < self.data_width:
+                continue
 
-        data = tuple(zip(*data))
-        self.__data.append(data)
-        self.__data_t.append(timestamps[0])
+            print("Decoded msg = \t", timestamps[0], data[0]) if self.__verbose else None
 
-        print(f"INFO: Sucessfully Read a chunk") if self.__verbose else None
+            data = tuple(zip(*data))
+            self.__data.append(data)
+            self.__data_t.append(timestamps[0])
+            self.__key.append(key)
+
+            print(f"Sucessfully Read a chunk") if self.__verbose else None
 
     def preprocess(self):
         """preprocess data"""
@@ -188,16 +202,17 @@ class EEGStreamProcessor:
         for i in range(0, len(self.__res)):
             res = self.__res.pop()
             tim = self.__res_t.pop()
+            key = self.__key.pop()
+
             joint_str = res
             #Fixme: ductape the model prediction should be restricted
             if res == 0:
                 joint_str = 'bckg'
             elif res == 1:
                 joint_str = 'pres'
-            key = 'key'
             value = "{'t':%.6f,'v':["%float(tim)+"'"+joint_str+"'"+"]}"
             self.producer.produce(self.__topic_out, key=key, value=value)
-            print(f'Published: {tim}, {res}') if self.__verbose else None
+            print(f'Published: Key={key}, time={tim}, res={res}') if self.__verbose else None
 
     def stop(self):
         self.consumer.close()
@@ -257,17 +272,6 @@ class EEGStreamProcessor:
             heart_beat = new_heartbeat
 
         return sampling_delay, sampling_count, heart_beat
-
-
-    @property
-    def _streamqueue(self):
-        """Access to streamqueue"""
-        return self.__streamqueue
-
-    @property
-    def _result(self):
-        """Access to predicted results"""
-        return self.__res
 
 
 if __name__ == '__main__':

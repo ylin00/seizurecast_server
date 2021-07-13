@@ -14,12 +14,12 @@ The real-time modeling will be done by EEGStreamProcessor.py.
     sudo apt-get install python3 python-dev python3-dev \
      build-essential libssl-dev libffi-dev \
      libxml2-dev libxslt1-dev zlib1g-dev \
-     python-pip
+     python3-pip
     ```
     * Note you may need to install Java 8 
       ```sh
       sudo apt update
-      sudo apt install openjdk-8-jdk openjdk-8-jre
+      sudo apt install openjdk-8-jdk openjdk-8-jre cmake
       java -version
       ```
       ```sh

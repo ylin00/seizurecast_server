@@ -1,8 +1,8 @@
-
 # External packages
-numpy
-pandas
-sklearn
+numpy==1.19.5
+pandas==1.1.5
+sklearn==0.22.1
+confluent-kafka==1.3.0
 
 # Github repos
-git+https://github.com/forrestbao/pyeeg.git
+git+https://github.com/forrestbao/pyeeg.git@e5d34f8

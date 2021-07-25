@@ -70,8 +70,9 @@ The real-time modeling will be done by EEGStreamProcessor.py.
     ```sh
     cp config/server.properties config/server.properties.backup
     echo "advertised.listeners=PLAINTEXT://<your.public.IP>:9092" >> config/server.properties
-    echo "advertised.listeners=PLAINTEXT://localhost:9092" >> config/server.properties
-    ```
+    echo "listeners=PLAINTEXT://0.0.0.0:9092" >> config/server.properties
+    ``` 
+    
 1. Start Kafka Server.
     ```sh
     tmux new -s kafka
